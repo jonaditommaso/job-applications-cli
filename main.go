@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"job-applications-cli/internal/application"
 	"job-applications-cli/internal/repository"
@@ -16,9 +18,7 @@ func main() {
 	// Conect to the database
 	godotenv.Load()
 
-	conn, err := repository.Connect(
-		os.Getenv("DATABASE_URL"),
-	)
+	conn, err := repository.Connect(os.Getenv("DATABASE_URL"))
 
 	if err != nil {
 		panic(err)
@@ -85,7 +85,34 @@ func main() {
 		fmt.Println(app)
 
 	case "add":
-		// TODO: Implement add command
+		reader := bufio.NewReader(os.Stdin)
+
+		fmt.Print("Company: ")
+		company, _ := reader.ReadString('\n')
+
+		fmt.Print("Role: ")
+		role, _ := reader.ReadString('\n')
+
+		fmt.Print("Status: ")
+		status, _ := reader.ReadString('\n')
+
+		fmt.Print("Channel: ")
+		channel, _ := reader.ReadString('\n')
+
+		newApp := application.JobApplication{
+			Company: strings.TrimSpace(company),
+			Role:    strings.TrimSpace(role),
+			Status:  application.ApplicationStatus(strings.TrimSpace(status)),
+			Channel: strings.TrimSpace(channel),
+		}
+
+		err := repository.CreateApplication(conn, newApp)
+		if err != nil {
+			fmt.Println("failed to create application because of error:", err)
+			return
+		}
+
+		fmt.Println("application created")
 	default:
 		fmt.Println("unknown command")
 	}
