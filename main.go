@@ -12,6 +12,9 @@ import (
 	"job-applications-cli/internal/repository"
 
 	"github.com/joho/godotenv"
+	"github.com/manifoldco/promptui"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func main() {
@@ -28,30 +31,6 @@ func main() {
 
 	fmt.Println("Connected!")
 
-	// Make the query
-	rows, err := conn.Query(context.Background(), "SELECT id, company, role, status FROM applications") // Only these columns for now.
-	if err != nil {
-		panic(err)
-	}
-	defer rows.Close()
-
-	// Read the results.
-	applications := []application.JobApplication{}
-
-	for rows.Next() {
-		var app application.JobApplication
-		if err := rows.Scan(&app.Id, &app.Company, &app.Role, &app.Status); err != nil {
-			panic(err)
-		}
-		applications = append(applications, app)
-	}
-
-	if err := rows.Err(); err != nil {
-		panic(err)
-	}
-
-	application.InitializeApplications(applications)
-
 	// Handle commands
 	args := os.Args
 
@@ -65,6 +44,21 @@ func main() {
 
 	// 2. Routing
 	switch command {
+	case "list":
+		applications, err := repository.GetApplications(conn)
+		if err != nil {
+			panic(err)
+		}
+
+		for _, app := range applications {
+			fmt.Printf(
+				"Company: %s, Role: %s, Status: %s\n, Channel: %s\n",
+				app.Company,
+				app.Role,
+				app.Status,
+				app.Channel,
+			)
+		}
 	case "get":
 		if len(args) < 3 {
 			fmt.Println("usage: japp get <id>")
@@ -77,7 +71,7 @@ func main() {
 			return
 		}
 
-		app, err := application.GetApplication(idInt)
+		app, err := repository.GetApplication(conn, idInt)
 		if err != nil {
 			fmt.Println("not found")
 			return
@@ -113,6 +107,75 @@ func main() {
 		}
 
 		fmt.Println("application created")
+	case "update":
+		if len(args) < 3 {
+			fmt.Println("usage: japp update <id>")
+			return
+		}
+
+		idInt, err := strconv.Atoi(args[2])
+		if err != nil {
+			fmt.Println("invalid id")
+			return
+		}
+
+		fields := []string{
+			"company",
+			"role",
+			"status",
+			"channel",
+		}
+
+		prompt := promptui.Select{
+			Label: "Field to update",
+			Items: fields,
+		}
+
+		_, field, err := prompt.Run()
+		if err != nil {
+			fmt.Println("selection cancelled")
+			return
+		}
+
+		caser := cases.Title(language.English)
+
+		valuePrompt := promptui.Prompt{
+			Label: caser.String(field),
+		}
+
+		newValue, err := valuePrompt.Run()
+		if err != nil {
+			fmt.Println("input cancelled")
+			return
+		}
+
+		err = repository.UpdateApplication(conn, idInt, field, newValue)
+		if err != nil {
+			fmt.Println("failed to update application because of error:", err)
+			return
+		}
+
+		fmt.Printf("application %d updated\n", idInt)
+
+	case "delete":
+		if len(args) < 3 {
+			fmt.Println("usage: japp delete <id>")
+			return
+		}
+
+		idInt, err := strconv.Atoi(os.Args[2])
+		if err != nil {
+			fmt.Println("invalid id")
+			return
+		}
+
+		err = repository.DeleteApplication(conn, idInt)
+		if err != nil {
+			fmt.Println("failed to delete application because of error:", err)
+			return
+		}
+
+		fmt.Println("application deleted")
 	default:
 		fmt.Println("unknown command")
 	}
